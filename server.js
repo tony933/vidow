@@ -1,9 +1,18 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const helmet = require('helmet');
+
 
 // إعداد الخادم
 const app = express();
+app.use(helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'none'"],
+      scriptSrc: ["'self'", "https://vercel.live"],
+      objectSrc: ["'none'"]
+    }
+  }));
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
