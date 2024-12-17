@@ -9,8 +9,9 @@ const app = express();
 app.use(helmet.contentSecurityPolicy({
     directives: {
       defaultSrc: ["'none'"],
-      scriptSrc: ["'self'", "https://vercel.live"],
-      objectSrc: ["'none'"]
+      scriptSrc: ["'self'", "https://vercel.live"], // السماح بتحميل السكربتات من vercel.live
+      objectSrc: ["'none'"],
+      styleSrc: ["'self'"]
     }
   }));
 const server = http.createServer(app);
