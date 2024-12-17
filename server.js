@@ -18,7 +18,13 @@ app.use(express.static('public'));
 // التعامل مع الاتصال عبر Socket.io
 io.on('connection', (socket) => {
   console.log('A user connected');
-  
+
+  // استلام اسم المستخدم عند الاتصال
+  socket.on('join', (username) => {
+    socket.username = username; // تخزين اسم المستخدم في الجلسة
+    console.log(`${username} joined the chat`);
+  });
+
   // إرسال عرض (offer) للمستخدمين الآخرين
   socket.on('offer', (offer) => {
     socket.broadcast.emit('offer', offer);
@@ -35,7 +41,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('A user disconnected');
+    console.log(`${socket.username} disconnected`);
   });
 });
 
