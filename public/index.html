@@ -18,9 +18,9 @@
   <button id="joinRoom">Join Room</button>
   <div id="videoContainer"></div>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
   <script>
-        const socket = io('https://vidow.vercel.app');  // الاتصال مع خادم Socket.io
+        const socket = io('');  // الاتصال مع خادم Socket.io
         const videoContainer = document.getElementById('videoContainer');
     const usernameInput = document.getElementById('username');
     const joinRoomBtn = document.getElementById('joinRoom');
