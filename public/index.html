@@ -1,191 +1,132 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video Call</title>
-  <style>
-    video {
-      width: 300px;
-      height: 225px;
-      margin: 10px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Call</title>
+    <style>
+        video {
+            width: 300px;
+            height: 300px;
+            margin: 10px;
+        }
+    </style>
 </head>
 <body>
-  <h1>Video Call</h1>
-  <input type="text" id="username" placeholder="Enter your name" />
-  <button id="joinRoom">Join Room</button>
-  <div id="videoContainer"></div>
+    <h2>Video Call App</h2>
+    <div id="video-container"></div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
-    const videoContainer = document.getElementById('videoContainer');
-    const usernameInput = document.getElementById('username');
-    const joinRoomBtn = document.getElementById('joinRoom');
-    let localStream;
-    let peerConnections = {}; // تخزين PeerConnections للمستخدمين
-    const roomName = 'myRoom';  // اسم الغرفة
+    <button id="startButton">Start Call</button>
+    <button id="endButton" style="display:none;">End Call</button>
 
-    joinRoomBtn.onclick = () => {
-      const username = usernameInput.value;
-      if (!username) return alert('Please enter your name!');
-      socket.emit('joinRoom', username, roomName); // الانضمام إلى الغرفة
-      startVideoCall();
-    };
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script>
+        const socket = io('https://vidow-fhag9fpyp-murtadas-projects-868f6b98.vercel.app');  // الاتصال مع خادم Socket.io
 
-    // 1. بداية المكالمة
-    async function startVideoCall() {
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        if (videoDevices.length === 0) {
-          throw new Error('No video devices found');
-        }
+        let localStream;
+        let remoteStream;
+        let peerConnection;
+        const videoContainer = document.getElementById('video-container');
 
-        const selectedVideoDevice = videoDevices[0]; // اختيار الكاميرا الأولى
-        const constraints = {
-          video: { deviceId: selectedVideoDevice.deviceId },
-          audio: true
+        // إعدادات WebRTC
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
         };
 
-        localStream = await navigator.mediaDevices.getUserMedia(constraints);
-
-        const localVideo = document.createElement('video');
-        localVideo.srcObject = localStream;
-        localVideo.play();
-        videoContainer.appendChild(localVideo);
-
-        // عندما ينضم مستخدم جديد
-        socket.on('userJoined', (username) => {
-          console.log(`${username} joined the room`);
-          createPeerConnection(username);
-        });
-
-        // التعامل مع عرض (offer) من مستخدم آخر
-        socket.on('offer', (offer, from) => {
-          console.log(`Received offer from ${from}`);
-          if (!peerConnections[from]) {
-            createPeerConnection(from);
-          }
-          handleOffer(offer, from);
-        });
-
-        // التعامل مع إجابة (answer) من مستخدم آخر
-        socket.on('answer', (answer, to) => {
-          console.log(`Received answer from ${to}`);
-          if (peerConnections[to]) {
-            handleAnswer(answer, to);
-          }
-        });
-
-        // التعامل مع ICE candidates
-        socket.on('iceCandidate', (candidate, from) => {
-          console.log(`Received ICE candidate from ${from}`);
-          if (peerConnections[from]) {
-            handleIceCandidate(candidate, from);
-          }
-        });
-      } catch (error) {
-        console.error('Error getting user media:', error);
-        alert(`Error: ${error.message}`);
-      }
-    }
-
-    // 2. إنشاء PeerConnection مع مستخدم جديد
-    function createPeerConnection(username) {
-      console.log(`Creating PeerConnection for ${username}`);
-      const peerConnection = new RTCPeerConnection();
-      peerConnections[username] = peerConnection;
-
-      // إضافة الفيديو المحلي إلى PeerConnection
-      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-      // إرسال عرض (offer) للمستخدم الأول
-      if (Object.keys(peerConnections).length === 1) {
-        peerConnection.createOffer()
-          .then(offer => {
-            return peerConnection.setLocalDescription(offer);
-          })
-          .then(() => {
-            console.log(`Sending offer to ${username}`);
-            socket.emit('offer', peerConnection.localDescription, roomName); // إرسال العرض
-          })
-          .catch(error => console.error('Offer creation failed:', error));
-      }
-
-      // التعامل مع ICE candidates
-      peerConnection.onicecandidate = event => {
-        if (event.candidate) {
-          console.log('Sending ICE candidate');
-          socket.emit('iceCandidate', event.candidate, roomName); // إرسال الـ ICE candidate
+        // الحصول على الفيديو من الكاميرا
+        async function startLocalVideo() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const localVideo = document.createElement('video');
+                localVideo.srcObject = localStream;
+                localVideo.play();
+                videoContainer.appendChild(localVideo);
+            } catch (error) {
+                console.error("Error accessing media devices.", error);
+            }
         }
-      };
 
-      // إضافة الفيديو المستلم من الطرف الآخر إلى نافذة الفيديو
-      peerConnection.ontrack = event => {
-        console.log(`Received video track from ${username}`);
-        const remoteVideo = document.createElement('video');
-        remoteVideo.srcObject = event.streams[0];
-        remoteVideo.play();
-        videoContainer.appendChild(remoteVideo);
-      };
-    }
+        // بدء مكالمة الفيديو
+        async function startCall() {
+            startLocalVideo();
 
-    // 3. التعامل مع عرض (offer) من مستخدم آخر
-    function handleOffer(offer, from) {
-      console.log(`Handling offer from ${from}`);
-      const peerConnection = peerConnections[from];
+            // إعداد PeerConnection
+            peerConnection = new RTCPeerConnection(configuration);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-      if (!peerConnection) {
-        console.error('PeerConnection not found for:', from);
-        return;
-      }
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice-candidate', event.candidate);  // إرسال مرشح ICE إلى الآخرين
+                }
+            };
 
-      // إعداد الـ PeerConnection مع العرض الوارد
-      peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
-        .then(() => {
-          return peerConnection.createAnswer();
-        })
-        .then(answer => {
-          return peerConnection.setLocalDescription(answer);
-        })
-        .then(() => {
-          console.log(`Sending answer to ${from}`);
-          socket.emit('answer', peerConnection.localDescription, roomName); // إرسال الإجابة
-        })
-        .catch(error => console.error('Offer handling failed:', error));
-    }
+            peerConnection.ontrack = (event) => {
+                if (!remoteStream) {
+                    remoteStream = new MediaStream();
+                    const remoteVideo = document.createElement('video');
+                    remoteVideo.srcObject = remoteStream;
+                    remoteVideo.play();
+                    videoContainer.appendChild(remoteVideo);
+                }
+                remoteStream.addTrack(event.track);
+            };
 
-    // 4. التعامل مع الإجابة (answer) من مستخدم آخر
-    function handleAnswer(answer, to) {
-      console.log(`Handling answer from ${to}`);
-      const peerConnection = peerConnections[to];
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            socket.emit('offer', offer);  // إرسال العرض إلى الخادم
+        }
 
-      if (!peerConnection) {
-        console.error('PeerConnection not found for:', to);
-        return;
-      }
+        // إنهاء المكالمة
+        function endCall() {
+            peerConnection.close();
+            localStream.getTracks().forEach(track => track.stop());
+            videoContainer.innerHTML = '';
+        }
 
-      // إعداد الإجابة في PeerConnection
-      peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
-        .catch(error => console.error('Answer handling failed:', error));
-    }
+        // استقبال العرض من الخادم
+        socket.on('offer', async (offer) => {
+            peerConnection = new RTCPeerConnection(configuration);
+            peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
 
-    // 5. التعامل مع الـ ICE candidates من مستخدم آخر
-    function handleIceCandidate(candidate, from) {
-      console.log(`Handling ICE candidate from ${from}`);
-      const peerConnection = peerConnections[from];
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
-      if (!peerConnection) {
-        console.error('PeerConnection not found for:', from);
-        return;
-      }
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice-candidate', event.candidate);
+                }
+            };
 
-      peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
-        .catch(error => console.error('ICE candidate handling failed:', error));
-    }
-  </script>
+            peerConnection.ontrack = (event) => {
+                if (!remoteStream) {
+                    remoteStream = new MediaStream();
+                    const remoteVideo = document.createElement('video');
+                    remoteVideo.srcObject = remoteStream;
+                    remoteVideo.play();
+                    videoContainer.appendChild(remoteVideo);
+                }
+                remoteStream.addTrack(event.track);
+            };
+
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            socket.emit('answer', answer);  // إرسال الإجابة إلى الخادم
+        });
+
+        // استقبال الإجابة من الخادم
+        socket.on('answer', (answer) => {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        });
+
+        // استقبال مرشحات ICE من الخادم
+        socket.on('ice-candidate', (candidate) => {
+            peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        });
+
+        // إضافة الأحداث إلى الأزرار
+        document.getElementById('startButton').addEventListener('click', startCall);
+        document.getElementById('endButton').addEventListener('click', endCall);
+    </script>
 </body>
 </html>
